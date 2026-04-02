@@ -26,7 +26,7 @@ CREATE TABLE containers (
     chemical_id     BIGINT NOT NULL REFERENCES chemicals(id),
     room_id         BIGINT NOT NULL REFERENCES rooms(id),
     label_code      TEXT UNIQUE,
-    quantity        NUMERIC(12,3) NOT NULL,
+    quantity        DOUBLE PRECISION NOT NULL,
     unit            TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'available',
     checked_out_by  BIGINT REFERENCES employees(id),

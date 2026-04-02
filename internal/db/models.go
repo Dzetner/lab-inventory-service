@@ -22,7 +22,7 @@ type Container struct {
 	ChemicalID   int64              `json:"chemical_id"`
 	RoomID       int64              `json:"room_id"`
 	LabelCode    pgtype.Text        `json:"label_code"`
-	Quantity     pgtype.Numeric     `json:"quantity"`
+	Quantity     float64            `json:"quantity"`
 	Unit         string             `json:"unit"`
 	Status       string             `json:"status"`
 	CheckedOutBy pgtype.Int8        `json:"checked_out_by"`
