@@ -1,68 +1,110 @@
 # lab-inventory-service
 
-Простой REST-сервис для управления лабораторным инвентарём: сотрудники, помещения, химические вещества и конкретные ёмкости (бутылки/флаконы) с реагентами.
+Простой REST API для учёта лабораторного инвентаря: сотрудников, помещений, химических веществ и конкретных ёмкостей с реагентами. Сейчас сервис уже поддерживает создание и просмотр основных сущностей, поиск по химикатам, фильтрацию контейнеров, а также операции выдачи и возврата контейнера. [cite:12]
 
 ## Стек
 
-- Go + chi (HTTP роутер)
+- Go
+- chi
 - PostgreSQL
-- sqlc (генерация type-safe слоя доступа к БД)
 - pgx / pgxpool
+- sqlc
 
-## Модель данных
+## Что умеет сервис
 
-Основные сущности:
+Сервис работает с четырьмя основными сущностями:
 
-- **employees** – сотрудники лаборатории  
-  - `id`, `full_name`, `role`, `created_at`
-- **rooms** – помещения / комнаты  
-  - `id`, `name`, `description`, `created_at`
-- **chemicals** – химические вещества  
-  - `id`, `name`, `cas_number`, `formula`, `sds_url`, `created_at`
-- **containers** – конкретные ёмкости с реагентами  
-  - `id`, `chemical_id`, `room_id`, `label_code`, `quantity`, `unit`, `status`, `checked_out_by`, `created_at`
+- **employees** — сотрудники лаборатории. [cite:12]
+- **rooms** — помещения / комнаты. [cite:12]
+- **chemicals** — химические вещества с именем, CAS, формулой и SDS URL. [cite:12]
+- **containers** — конкретные физические ёмкости с веществом, привязанные к комнате. [cite:12]
 
-Одна запись в `chemicals` может иметь много `containers`.
+Дополнительно уже реализованы:
+
+- поиск химикатов по имени, CAS или формуле через один query-параметр. [cite:12]
+- фильтрация контейнеров по статусу и комнате. [cite:12]
+- checkout / return контейнера. [cite:12]
+
+## Структура данных
+
+### employees
+
+- `id`
+- `full_name`
+- `role`
+- `created_at`
+
+### rooms
+
+- `id`
+- `name`
+- `description`
+- `created_at`
+
+### chemicals
+
+- `id`
+- `name`
+- `cas_number`
+- `formula`
+- `sds_url`
+- `created_at`
+
+### containers
+
+- `id`
+- `chemical_id`
+- `room_id`
+- `label_code`
+- `quantity`
+- `unit`
+- `status`
+- `checked_out_by`
+- `created_at`
+
+`containers` — это не “вид вещества”, а конкретные физические бутылки / флаконы / канистры с реагентом. Одна запись в `chemicals` может иметь много `containers`. [cite:12]
 
 ## Запуск
 
-### 1. PostgreSQL
+### 1. Поднять PostgreSQL
 
-Создать базу:
+Нужна база данных PostgreSQL с именем `lab_inventory`.
 
-```sql
-CREATE DATABASE lab_inventory;
-```
-
-Выполнить SQL-схему (из `sql/schema.sql`) в базе `lab_inventory` – можно через psql или pgAdmin.
-
-По умолчанию сервис подключается к Postgres по DSN:
+По умолчанию сервис подключается через DSN вида:
 
 ```text
 postgres://postgres:postgres@localhost:5432/lab_inventory?sslmode=disable
 ```
 
-Можно переопределить через переменную окружения:
+Если нужно, можно задать свой DSN через переменную окружения:
 
 ```bash
-export LAB_INVENTORY_DB_DSN="postgres://USER:PASS@HOST:PORT/lab_inventory?sslmode=disable"
+LAB_INVENTORY_DB_DSN=postgres://USER:PASSWORD@HOST:PORT/lab_inventory?sslmode=disable
 ```
 
-### 2. Генерация кода sqlc
+### 2. Применить схему
+
+Создай таблицы из `sql/schema.sql`.
+
+### 3. Сгенерировать sqlc-код
 
 ```bash
 sqlc generate
 ```
 
-### 3. Запуск сервиса
+### 4. Запустить сервис
 
 ```bash
 go run ./cmd/lab-inventory-service
 ```
 
-По умолчанию сервис слушает `http://localhost:8080`.
+Сервис слушает:
 
-## HTTP API (черновик)
+```text
+http://localhost:8080
+```
+
+## API
 
 ### Health
 
@@ -70,42 +112,54 @@ go run ./cmd/lab-inventory-service
 GET /health
 ```
 
-Ответ: `200 OK`, текст `ok`.
+Ответ:
+
+```text
+ok
+```
 
 ---
 
 ### Employees
 
+#### Список сотрудников
+
 ```http
 GET /employees
 ```
 
-Возвращает список сотрудников.
+#### Создать сотрудника
 
 ```http
 POST /employees
 Content-Type: application/json
+```
 
+```json
 {
   "full_name": "Ivan Petrov",
   "role": "chemist"
 }
 ```
 
-Ответ: `201 Created` и созданный сотрудник.
-
 ---
 
 ### Rooms
+
+#### Список комнат
 
 ```http
 GET /rooms
 ```
 
+#### Создать комнату
+
 ```http
 POST /rooms
 Content-Type: application/json
+```
 
+```json
 {
   "name": "Room 101",
   "description": "Organic synthesis lab"
@@ -116,14 +170,20 @@ Content-Type: application/json
 
 ### Chemicals
 
+#### Список химикатов
+
 ```http
 GET /chemicals
 ```
 
+#### Создать химикат
+
 ```http
 POST /chemicals
 Content-Type: application/json
+```
 
+```json
 {
   "name": "Acetone",
   "cas_number": "67-64-1",
@@ -138,33 +198,34 @@ Content-Type: application/json
 GET /chemicals/search?query=acetone
 ```
 
-Ищет по имени, CAS и формуле (ILIKE).
+Поиск работает по **одному** query-параметру `query`: сервис ищет это значение сразу в `name`, `cas_number` и `formula`. То есть можно передать либо имя вещества, либо CAS, либо формулу — не нужно заполнять всё сразу. [cite:12]
+
+Примеры:
+
+```http
+GET /chemicals/search?query=acetone
+GET /chemicals/search?query=67-64-1
+GET /chemicals/search?query=C3H6O
+```
 
 ---
 
 ### Containers
 
+#### Список контейнеров
+
 ```http
 GET /containers
 ```
 
-Список всех ёмкостей.
-
-#### Фильтрация контейнеров
-
-```http
-GET /containers?status=available&room_id=1
-```
-
-`status` – строка (`available`, `checked_out` и т.п.),  
-`room_id` – id помещения.
-
-#### Создание контейнера
+#### Создать контейнер
 
 ```http
 POST /containers
 Content-Type: application/json
+```
 
+```json
 {
   "chemical_id": 1,
   "room_id": 1,
@@ -175,18 +236,41 @@ Content-Type: application/json
 }
 ```
 
-#### Взять контейнер (checkout)
+#### Фильтрация контейнеров
+
+```http
+GET /containers?status=available&room_id=1
+```
+
+Поддерживаются query-параметры:
+
+- `status`
+- `room_id`
+
+Можно использовать как оба сразу, так и только один из них. [cite:12]
+
+Примеры:
+
+```http
+GET /containers?status=available
+GET /containers?room_id=1
+GET /containers?status=checked_out&room_id=1
+```
+
+#### Взять контейнер
 
 ```http
 POST /containers/{id}/checkout
 Content-Type: application/json
+```
 
+```json
 {
   "employee_id": 1
 }
 ```
 
-Меняет `status` на `checked_out` и ставит `checked_out_by`.
+После этого контейнер переводится в статус `checked_out`, а поле `checked_out_by` заполняется id сотрудника. [cite:12]
 
 #### Вернуть контейнер
 
@@ -194,13 +278,62 @@ Content-Type: application/json
 POST /containers/{id}/return
 ```
 
-Меняет `status` на `available` и сбрасывает `checked_out_by`.
+После этого контейнер переводится обратно в статус `available`, а `checked_out_by` сбрасывается в `null`. [cite:12]
 
----
+## Примеры запросов
 
-## TODO / идеи
+### PowerShell
 
-- Авторизация: передавать ID сотрудника через заголовок (`X-Employee-ID`) вместо JSON в body.
-- История движений контейнеров (лог checkout/return).
-- Больше фильтров и сортировки (по веществу, по количеству, по сроку годности и т.п.).
-- Простая мобильная/веб-клиентская морда с QR-сканером.
+```powershell
+curl http://localhost:8080/health -UseBasicParsing
+
+curl http://localhost:8080/employees `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"full_name":"Ivan Petrov","role":"chemist"}' `
+  -UseBasicParsing
+
+curl http://localhost:8080/rooms `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"name":"Room 101","description":"Organic synthesis lab"}' `
+  -UseBasicParsing
+
+curl http://localhost:8080/chemicals `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"name":"Acetone","cas_number":"67-64-1","formula":"C3H6O","sds_url":"https://example.com/acetone-sds"}' `
+  -UseBasicParsing
+
+curl "http://localhost:8080/chemicals/search?query=acetone" -UseBasicParsing
+
+curl http://localhost:8080/containers `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"chemical_id":1,"room_id":1,"label_code":"ACET-001","quantity":0.5,"unit":"L","status":"available"}' `
+  -UseBasicParsing
+
+curl http://localhost:8080/containers/1/checkout `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"employee_id":1}' `
+  -UseBasicParsing
+
+curl http://localhost:8080/containers/1/return `
+  -Method Post `
+  -UseBasicParsing
+
+curl "http://localhost:8080/containers?status=available&room_id=1" -UseBasicParsing
+```
+
+## Текущее состояние
+
+На текущем этапе это MVP лабораторного inventory-сервиса: есть CRUD-основа для основных сущностей, выдача/возврат контейнера, поиск химикатов и фильтрация контейнеров. [cite:12]
+
+## Возможные следующие шаги
+
+- история движений контейнеров;
+- валидация бизнес-логики для checkout / return;
+- простая авторизация;
+- QR-коды для `label_code`;
+- мобильный клиент или web UI. [cite:12]
