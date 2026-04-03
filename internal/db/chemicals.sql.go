@@ -75,3 +75,40 @@ func (q *Queries) ListChemicals(ctx context.Context) ([]Chemical, error) {
 	}
 	return items, nil
 }
+
+const searchChemicals = `-- name: SearchChemicals :many
+SELECT id, name, cas_number, formula, sds_url, created_at
+FROM chemicals
+WHERE
+    ($1::text IS NULL OR name ILIKE '%' || $1 || '%'
+     OR cas_number ILIKE '%' || $1 || '%'
+     OR formula ILIKE '%' || $1 || '%')
+ORDER BY name
+`
+
+func (q *Queries) SearchChemicals(ctx context.Context, dollar_1 string) ([]Chemical, error) {
+	rows, err := q.db.Query(ctx, searchChemicals, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chemical
+	for rows.Next() {
+		var i Chemical
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CasNumber,
+			&i.Formula,
+			&i.SdsUrl,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

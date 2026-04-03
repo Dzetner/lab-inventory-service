@@ -22,13 +22,47 @@ func registerContainerRoutes(r *chi.Mux, a *App) {
 }
 
 func (a *App) listContainersHandler(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	roomIDStr := r.URL.Query().Get("room_id")
+
+	var roomID int64
+	if roomIDStr != "" {
+		v, err := strconv.ParseInt(roomIDStr, 10, 64)
+		if err != nil || v <= 0 {
+			http.Error(w, "invalid room_id", http.StatusBadRequest)
+			return
+		}
+		roomID = v
+	} else {
+		roomID = 0
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
-	containers, err := a.DB.ListContainers(ctx)
+	if status == "" && roomID == 0 {
+		containers, err := a.DB.ListContainers(ctx)
+		if err != nil {
+			log.Println("list containers:", err)
+			http.Error(w, "failed to list containers", http.StatusInternalServerError)
+			return
+		}
+
+		if containers == nil {
+			containers = []db.Container{}
+		}
+
+		writeJSON(w, http.StatusOK, containers)
+		return
+	}
+
+	containers, err := a.DB.FilterContainers(ctx, db.FilterContainersParams{
+		Column1: status,
+		Column2: roomID,
+	})
 	if err != nil {
-		log.Println("list containers:", err)
-		http.Error(w, "failed to list containers", http.StatusInternalServerError)
+		log.Println("filter containers:", err)
+		http.Error(w, "failed to filter containers", http.StatusInternalServerError)
 		return
 	}
 

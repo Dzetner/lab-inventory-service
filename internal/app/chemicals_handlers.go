@@ -16,6 +16,8 @@ import (
 func registerChemicalRoutes(r *chi.Mux, a *App) {
 	r.Get("/chemicals", a.listChemicalsHandler)
 	r.Post("/chemicals", a.createChemicalHandler)
+	r.Get("/chemicals/search", a.searchChemicalsHandler) // поиск
+
 }
 
 func (a *App) listChemicalsHandler(w http.ResponseWriter, r *http.Request) {
@@ -79,4 +81,29 @@ func (a *App) createChemicalHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, chem)
+}
+
+func (a *App) searchChemicalsHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("query")
+	// Пустой query — вернём пустой список, чтобы не лить всю базу по ошибке.
+	if q == "" {
+		writeJSON(w, http.StatusOK, []db.Chemical{})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	chems, err := a.DB.SearchChemicals(ctx, q)
+	if err != nil {
+		log.Println("search chemicals:", err)
+		http.Error(w, "failed to search chemicals", http.StatusInternalServerError)
+		return
+	}
+
+	if chems == nil {
+		chems = []db.Chemical{}
+	}
+
+	writeJSON(w, http.StatusOK, chems)
 }

@@ -82,6 +82,51 @@ func (q *Queries) CreateContainer(ctx context.Context, arg CreateContainerParams
 	return i, err
 }
 
+const filterContainers = `-- name: FilterContainers :many
+SELECT id, chemical_id, room_id, label_code, quantity, unit, status, checked_out_by, created_at
+FROM containers
+WHERE
+    ($1 = '' OR status = $1)
+  AND
+    ($2 = 0 OR room_id = $2)
+ORDER BY id
+`
+
+type FilterContainersParams struct {
+	Column1 interface{} `json:"column_1"`
+	Column2 interface{} `json:"column_2"`
+}
+
+func (q *Queries) FilterContainers(ctx context.Context, arg FilterContainersParams) ([]Container, error) {
+	rows, err := q.db.Query(ctx, filterContainers, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Container
+	for rows.Next() {
+		var i Container
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChemicalID,
+			&i.RoomID,
+			&i.LabelCode,
+			&i.Quantity,
+			&i.Unit,
+			&i.Status,
+			&i.CheckedOutBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listContainers = `-- name: ListContainers :many
 SELECT id, chemical_id, room_id, label_code, quantity, unit, status, checked_out_by, created_at
 FROM containers
